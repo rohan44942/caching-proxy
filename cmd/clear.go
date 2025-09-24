@@ -10,8 +10,8 @@ var clearCmd = &cobra.Command{
 	Use:   "clear-cache",
 	Short: "Clear the cache",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Cache cleared!")
-		// Phase 4: actual cache clearing logic will go here
+		// Phase 4: hook into cache.Clear()
+		fmt.Println("Cache cleared! (stub, will implement in Phase 4)")
 	},
 }
 

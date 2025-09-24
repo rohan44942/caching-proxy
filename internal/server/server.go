@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/rohan44942/caching-proxy/internal/cache"
 	"github.com/rohan44942/caching-proxy/internal/config"
 )
 
@@ -15,23 +16,37 @@ func Start(cfg config.Config) error {
 		return fmt.Errorf("invalid origin URL: %w", err)
 	}
 
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		target := originURL.ResolveReference(r.URL) // combine origin + request path
+	c := cache.New()
 
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		key := r.Method + ":" + r.URL.String()
+
+		// 1. Check cache
+		if cachedResp, ok := c.Get(key); ok {
+			for name, values := range cachedResp.Header {
+				for _, value := range values {
+					w.Header().Add(name, value)
+				}
+			}
+			w.Header().Set("X-Cache", "HIT")
+			w.WriteHeader(cachedResp.StatusCode)
+			w.Write(cachedResp.Body)
+			return
+		}
+
+		// 2. Forward to origin
+		target := originURL.ResolveReference(r.URL)
 		req, err := http.NewRequest(r.Method, target.String(), r.Body)
 		if err != nil {
 			http.Error(w, "failed to create request", http.StatusInternalServerError)
 			return
 		}
-
-		// copy headers
 		for name, values := range r.Header {
 			for _, value := range values {
 				req.Header.Add(name, value)
 			}
 		}
 
-		// forward request
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -40,19 +55,25 @@ func Start(cfg config.Config) error {
 		}
 		defer resp.Body.Close()
 
-		// copy headers from origin
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, "failed to read origin response", http.StatusInternalServerError)
+			return
+		}
+
+		// Save to cache
+		c.Set(key, resp, body)
+
+		// Copy headers
 		for name, values := range resp.Header {
 			for _, value := range values {
 				w.Header().Add(name, value)
 			}
 		}
 
-		// mark as MISS (Phase 2 always MISS)
 		w.Header().Set("X-Cache", "MISS")
 		w.WriteHeader(resp.StatusCode)
-
-		// copy body
-		io.Copy(w, resp.Body)
+		w.Write(body)
 	}
 
 	http.HandleFunc("/", handler)
