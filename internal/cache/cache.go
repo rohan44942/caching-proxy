@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type CachedResponse struct {
@@ -21,6 +23,8 @@ type Cache struct {
 	TTL   time.Duration
 }
 
+// var GlobalCache *Cache
+
 func New(ttl time.Duration) *Cache {
 	return &Cache{
 		store: make(map[string]CachedResponse),
@@ -32,12 +36,12 @@ func (c *Cache) Get(key string) (CachedResponse, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	resp, ok := c.store[key]
-	// fmt.Printf("value of resp%v ", (resp))
 	if !ok {
 		return CachedResponse{}, false
 	}
 	if c.TTL > 0 && time.Since(resp.Timestamp) > c.TTL {
-		// expired, remove and return miss
+		// expired
+		logrus.WithField("key", key).Debug("cache expired, evicting")
 		c.mu.RUnlock()
 		c.mu.Lock()
 		delete(c.store, key)
@@ -65,13 +69,19 @@ func (c *Cache) Set(key string, resp *http.Response, body []byte) {
 		Body:       body,
 		Timestamp:  time.Now(),
 	}
-	// fmt.Print("value of key, and body length is ", key, len(body))
+
+	logrus.WithFields(logrus.Fields{
+		"key":        key,
+		"statusCode": resp.StatusCode,
+		"bodySize":   len(body),
+	}).Debug("cached response stored")
 }
 
 func (c *Cache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store = make(map[string]CachedResponse)
+	logrus.Warn("cache cleared")
 }
 
 // Utility: make body reusable
