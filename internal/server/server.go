@@ -16,13 +16,11 @@ func Start(cfg config.Config) error {
 		return fmt.Errorf("invalid origin URL: %w", err)
 	}
 
-	c := cache.New()
-
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + ":" + r.URL.String()
-
-		// 1. Check cache
-		if cachedResp, ok := c.Get(key); ok {
+		cachedResp, ok := cache.GlobalCache.Get(key)
+		// fmt.Printf("inside the function %v value of ok %v\n", len(cachedResp.Body), ok)
+		if ok {
 			for name, values := range cachedResp.Header {
 				for _, value := range values {
 					w.Header().Add(name, value)
@@ -34,7 +32,6 @@ func Start(cfg config.Config) error {
 			return
 		}
 
-		// 2. Forward to origin
 		target := originURL.ResolveReference(r.URL)
 		req, err := http.NewRequest(r.Method, target.String(), r.Body)
 		if err != nil {
@@ -60,11 +57,8 @@ func Start(cfg config.Config) error {
 			http.Error(w, "failed to read origin response", http.StatusInternalServerError)
 			return
 		}
+		cache.GlobalCache.Set(key, resp, body)
 
-		// Save to cache
-		c.Set(key, resp, body)
-
-		// Copy headers
 		for name, values := range resp.Header {
 			for _, value := range values {
 				w.Header().Add(name, value)

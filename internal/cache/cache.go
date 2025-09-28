@@ -18,11 +18,13 @@ type CachedResponse struct {
 type Cache struct {
 	mu    sync.RWMutex
 	store map[string]CachedResponse
+	TTL   time.Duration
 }
 
-func New() *Cache {
+func New(ttl time.Duration) *Cache {
 	return &Cache{
 		store: make(map[string]CachedResponse),
+		TTL:   ttl,
 	}
 }
 
@@ -30,14 +32,26 @@ func (c *Cache) Get(key string) (CachedResponse, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	resp, ok := c.store[key]
-	return resp, ok
+	// fmt.Printf("value of resp%v ", (resp))
+	if !ok {
+		return CachedResponse{}, false
+	}
+	if c.TTL > 0 && time.Since(resp.Timestamp) > c.TTL {
+		// expired, remove and return miss
+		c.mu.RUnlock()
+		c.mu.Lock()
+		delete(c.store, key)
+		c.mu.Unlock()
+		c.mu.RLock()
+		return CachedResponse{}, false
+	}
+	return resp, true
 }
 
 func (c *Cache) Set(key string, resp *http.Response, body []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Deep copy headers
 	headers := make(http.Header)
 	for k, v := range resp.Header {
 		copied := make([]string, len(v))
@@ -51,6 +65,7 @@ func (c *Cache) Set(key string, resp *http.Response, body []byte) {
 		Body:       body,
 		Timestamp:  time.Now(),
 	}
+	// fmt.Print("value of key, and body length is ", key, len(body))
 }
 
 func (c *Cache) Clear() {
@@ -66,6 +81,6 @@ func ReadAndCopyBody(resp *http.Response) ([]byte, error) {
 		return nil, err
 	}
 	resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewBuffer(body)) // reset body for re-read
+	resp.Body = io.NopCloser(bytes.NewBuffer(body))
 	return body, nil
 }
