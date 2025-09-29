@@ -109,25 +109,8 @@ docker run -p 3000:3000 caching-proxy serve --port 3000 --origin http://dummyjso
 
 * The proxy is available at **[http://localhost:3000](http://localhost:3000)** inside Docker.
 
----
 
-## Testing
-
-Unit tests are included for the **cache** functionality.
-
-```bash
-go test ./internal/cache -v
-```
-
-Tests cover:
-
-* Cache set/get
-* TTL expiration
-* Cache clearing
-
----
-
-## Project Structure
+## Project Structure (Not complete)
 
 ```
 caching-proxy/
