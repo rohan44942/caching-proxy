@@ -2,6 +2,10 @@
 
 A simple **caching proxy server** written in **Go**, which forwards requests to an origin server and caches responses to improve performance.
 
+# Problem description 
+
+https://roadmap.sh/projects/caching-server
+
 ---
 
 ## Features
